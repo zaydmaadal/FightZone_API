@@ -1,4 +1,5 @@
 const User = require("../models/User");
+const bcrypt = require("bcryptjs");
 
 // Haalt alle users op
 exports.getAllUsers = async (req, res) => {
@@ -11,13 +12,38 @@ exports.getAllUsers = async (req, res) => {
   }
 };
 
+// Haalt een specifieke user op
+exports.getUserById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({ message: "Gebruiker niet gevonden." });
+    }
+
+    res.status(200).json(user);
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error });
+  }
+};
+
 // Voegt een nieuwe user toe
 exports.createUser = async (req, res) => {
   try {
-    const { naam, email, wachtwoord, geboortedatum, role, vechterInfo } =
-      req.body;
+    const {
+      voornaam,
+      achternaam,
+      email,
+      wachtwoord,
+      geboortedatum,
+      club,
+      profielfoto,
+      role,
+      vechterInfo,
+    } = req.body;
 
-    if (!naam || !email || !wachtwoord || !role) {
+    if (!voornaam || !achternaam || !email || !wachtwoord || !role) {
       return res.status(400).json({ message: "Alle velden zijn verplicht" });
     }
 
@@ -27,12 +53,18 @@ exports.createUser = async (req, res) => {
       return res.status(400).json({ message: "Email is al in gebruik" });
     }
 
+    // Wachtwoord hashen
+    const hashedPassword = await bcrypt.hash(wachtwoord, 10);
+
     // Nieuwe gebruiker aanmaken
     const user = new User({
-      naam,
+      voornaam,
+      achternaam,
       email,
-      wachtwoord,
+      wachtwoord: hashedPassword,
       geboortedatum,
+      club,
+      profielfoto,
       role,
       vechterInfo: role === "Vechter" ? vechterInfo : undefined,
     });
@@ -54,10 +86,10 @@ exports.createUser = async (req, res) => {
 exports.plannenGevecht = async (req, res) => {
   try {
     const { id } = req.params; // Vechter-ID
-    const { tegenstanderId, datum } = req.body;
+    const { tegenstanderId, datum, event, locatie, knockout } = req.body;
 
     // Controleer of alle benodigde gegevens zijn verstrekt
-    if (!tegenstanderId || !datum) {
+    if (!tegenstanderId || !datum || !event || !locatie) {
       return res.status(400).json({
         message: "Tegenstander-ID en datum zijn verplicht.",
       });
@@ -81,7 +113,10 @@ exports.plannenGevecht = async (req, res) => {
     const nieuwGevecht = {
       tegenstander: tegenstanderId,
       datum: new Date(datum),
+      event,
+      locatie,
       resultaat: "Nog niet beoordeeld", // Resultaat nog niet bekend
+      knockout,
     };
 
     // Voeg gevecht toe aan de vechter
@@ -113,32 +148,84 @@ exports.plannenGevecht = async (req, res) => {
 // Bijwerkt het resultaat van een gevecht na het gevecht
 exports.updateGevechtResultaat = async (req, res) => {
   try {
-    const { id } = req.params; // Gevecht-ID
+    const { id, gevechtId } = req.params; // Haal het ID van de gebruiker en het gevecht op
     const { resultaat } = req.body;
 
     if (!resultaat) {
       return res.status(400).json({ message: "Resultaat is verplicht." });
     }
 
-    // Zoek het gevecht op basis van het ID
-    const gevecht = await User.aggregate([
-      { $unwind: "$vechterInfo.fights" },
-      { $match: { "vechterInfo.fights._id": mongoose.Types.ObjectId(id) } },
-    ]);
+    // Zoek de vechter
+    const vechter = await User.findOne(
+      { _id: id, "vechterInfo.fights._id": gevechtId } // Zoek op gebruiker en gevecht-ID
+    );
 
-    if (!gevecht || gevecht.length === 0) {
+    if (!vechter) {
+      console.log("Vechter niet gevonden.");
+      return res.status(404).json({ message: "Vechter niet gevonden." });
+    }
+
+    // Zoek het specifieke gevecht
+    const gevecht = vechter.vechterInfo.fights.find(
+      (f) => f._id.toString() === gevechtId
+    );
+
+    if (!gevecht) {
+      console.log("Gevecht niet gevonden.");
       return res.status(404).json({ message: "Gevecht niet gevonden." });
     }
 
-    // Update het resultaat van het gevecht
-    gevecht[0].vechterInfo.fights[0].resultaat = resultaat;
+    // Zoek de tegenstander
+    const tegenstander = await User.findOne({
+      _id: gevecht.tegenstander,
+      "vechterInfo.fights": {
+        $elemMatch: { tegenstander: vechter._id, datum: gevecht.datum },
+      },
+    });
 
-    // Sla de bijgewerkte gevechten op
-    await gevecht[0].save();
+    if (!tegenstander) {
+      console.log("Tegenstander niet gevonden.");
+      return res.status(404).json({ message: "Tegenstander niet gevonden." });
+    }
+
+    // Zoek het gevecht bij de tegenstander
+    const tegenstanderGevecht = tegenstander.vechterInfo.fights.find(
+      (f) =>
+        f.tegenstander.toString() === vechter._id.toString() &&
+        f.datum.toString() === gevecht.datum.toString()
+    );
+
+    if (!tegenstanderGevecht) {
+      console.log("Gevecht niet gevonden bij de tegenstander.");
+      return res
+        .status(404)
+        .json({ message: "Gevecht niet gevonden bij de tegenstander." });
+    }
+
+    // Resultaten instellen
+    let tegenstanderResultaat;
+    if (resultaat === "Winnaar") {
+      tegenstanderResultaat = "Verliezer";
+    } else if (resultaat === "Verliezer") {
+      tegenstanderResultaat = "Winnaar";
+    } else if (resultaat === "Gelijkstand") {
+      tegenstanderResultaat = "Gelijkstand";
+    } else {
+      return res.status(400).json({ message: "Ongeldig resultaat opgegeven." });
+    }
+
+    // Update het resultaat
+    gevecht.resultaat = resultaat;
+    tegenstanderGevecht.resultaat = tegenstanderResultaat;
+
+    // Sla de wijzigingen op
+    await vechter.save();
+    await tegenstander.save();
 
     res.status(200).json({
-      message: "Resultaat succesvol bijgewerkt voor het gevecht.",
-      gevecht,
+      message: "Resultaat succesvol bijgewerkt voor beide vechters.",
+      vechter,
+      tegenstander,
     });
   } catch (error) {
     console.error(

@@ -7,6 +7,7 @@ const cors = require("cors");
 const connectDB = require("./config/db");
 
 const usersRoutes = require("./routes/api/v1/users");
+const authRoutes = require("./routes/api/v1/auth");
 
 require("dotenv").config();
 
@@ -25,9 +26,13 @@ app.use(express.static(path.join(__dirname, "public")));
 app.use("/", indexRouter);
 
 app.use("/api/v1/users", usersRoutes);
+app.use("/api/v1/auth", authRoutes);
 
 connectDB();
 
 console.log("API is running on http://localhost:3000");
+
+//const PORT = process.env.PORT || 3000;
+//app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
 module.exports = app;
