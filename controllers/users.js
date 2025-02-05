@@ -41,8 +41,11 @@ exports.createUser = async (req, res) => {
       profielfoto,
       role,
       vechterInfo,
+      trainerInfo,
+      vkbmoLidInfo,
     } = req.body;
 
+    // Controleer verplichte velden
     if (!voornaam || !achternaam || !email || !wachtwoord || !role) {
       return res.status(400).json({ message: "Alle velden zijn verplicht" });
     }
@@ -56,8 +59,8 @@ exports.createUser = async (req, res) => {
     // Wachtwoord hashen
     const hashedPassword = await bcrypt.hash(wachtwoord, 10);
 
-    // Nieuwe gebruiker aanmaken
-    const user = new User({
+    // Maak een nieuw user-object op basis van de rol
+    const userData = {
       voornaam,
       achternaam,
       email,
@@ -66,8 +69,31 @@ exports.createUser = async (req, res) => {
       club,
       profielfoto,
       role,
-      vechterInfo: role === "Vechter" ? vechterInfo : undefined,
-    });
+    };
+
+    // Voeg rol-specifieke informatie toe
+    if (role === "Vechter") {
+      userData.vechterInfo = vechterInfo;
+    } else if (role === "Trainer") {
+      userData.trainerInfo = trainerInfo; // Voeg trainerInfo toe voor trainers
+    } else if (role === "VKBMO-lid") {
+      userData.vkbmoLidInfo = vkbmoLidInfo; // Voeg vkbmoLidInfo toe voor VKBMO-leden
+    }
+
+    if (role === "Vechter" || role === "Trainer") {
+      const existingClub = await Club.findById(club);
+      if (!existingClub) {
+        return res.status(404).json({ message: "Club niet gevonden" });
+      }
+      userData.club = club; // Koppel de gebruiker aan de club
+
+      // Gebruiker toevoegen aan de club
+      existingClub.leden.push(userData._id);
+      await existingClub.save();
+    }
+
+    // Nieuwe gebruiker aanmaken
+    const user = new User(userData);
 
     // Sla op in de database
     await user.save();
@@ -78,6 +104,83 @@ exports.createUser = async (req, res) => {
     });
   } catch (error) {
     console.error("Fout bij het maken van gebruiker:", error.message);
+    res.status(500).json({ message: "Serverfout", error: error.message });
+  }
+};
+
+exports.createMultipleUsers = async (req, res) => {
+  try {
+    const usersData = req.body; // Verwacht een array van gebruikers
+
+    if (!Array.isArray(usersData) || usersData.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "Een array met gebruikers is verplicht" });
+    }
+
+    const createdUsers = [];
+
+    for (const userData of usersData) {
+      const {
+        voornaam,
+        achternaam,
+        email,
+        wachtwoord,
+        geboortedatum,
+        role,
+        club,
+        profielfoto,
+        vechterInfo,
+        trainerInfo,
+        vkbmoLidInfo,
+      } = userData;
+
+      // Controleer verplichte velden
+      if (!voornaam || !achternaam || !email || !wachtwoord || !role) {
+        return res.status(400).json({ message: "Alle velden zijn verplicht" });
+      }
+
+      // Controleer of de gebruiker al bestaat
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return res
+          .status(400)
+          .json({ message: `Email ${email} is al in gebruik` });
+      }
+
+      // Wachtwoord hashen
+      const hashedPassword = await bcrypt.hash(wachtwoord, 10);
+
+      const newUser = new User({
+        voornaam,
+        achternaam,
+        email,
+        wachtwoord: hashedPassword,
+        geboortedatum,
+        role,
+        club,
+        profielfoto,
+      });
+
+      // Voeg rol-specifieke informatie toe
+      if (role === "Vechter") {
+        newUser.vechterInfo = vechterInfo;
+      } else if (role === "Trainer") {
+        newUser.trainerInfo = trainerInfo;
+      } else if (role === "VKBMO-lid") {
+        newUser.vkbmoLidInfo = vkbmoLidInfo;
+      }
+
+      await newUser.save();
+      createdUsers.push(newUser);
+    }
+
+    res.status(201).json({
+      message: "Gebruikers succesvol aangemaakt",
+      users: createdUsers,
+    });
+  } catch (error) {
+    console.error("Fout bij het maken van gebruikers:", error.message);
     res.status(500).json({ message: "Serverfout", error: error.message });
   }
 };

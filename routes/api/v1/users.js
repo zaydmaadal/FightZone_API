@@ -11,6 +11,9 @@ router.get("/:id", usersController.getUserById);
 // POST /api/v1/users - Voegt een nieuwe user toe
 router.post("/", usersController.createUser);
 
+// POST /api/v1/users - Voegt meerder nieuwe users toe
+router.post("/multiple", usersController.createMultipleUsers);
+
 // POST /api/v1/users/:id/gevechten - Plannen van een nieuw gevecht (Pre-fight)
 router.post("/:id/gevechten", usersController.plannenGevecht);
 

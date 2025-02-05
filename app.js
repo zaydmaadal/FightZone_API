@@ -8,6 +8,7 @@ const connectDB = require("./config/db");
 
 const usersRoutes = require("./routes/api/v1/users");
 const authRoutes = require("./routes/api/v1/auth");
+const clubsRoutes = require("./routes/api/v1/clubs");
 
 require("dotenv").config();
 
@@ -27,6 +28,7 @@ app.use("/", indexRouter);
 
 app.use("/api/v1/users", usersRoutes);
 app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/clubs", clubsRoutes);
 
 connectDB();
 

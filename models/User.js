@@ -29,8 +29,8 @@ const trainerSchema = new mongoose.Schema({
 });
 
 const vkbmoLidSchema = new mongoose.Schema({
-  lidnummer: { type: String, required: true },
-  datumVanInschrijving: { type: Date, default: Date.now },
+  Scheidsrechter: { type: Boolean, default: false },
+  Jurylid: { type: Boolean, default: false },
 });
 
 const userSchema = new mongoose.Schema(
@@ -40,7 +40,7 @@ const userSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true },
     wachtwoord: { type: String, required: true },
     geboortedatum: { type: Date, required: true },
-    club: { type: String }, //later automatisch verbonden met de club waar de trainer bij hoort
+    club: { type: mongoose.Schema.Types.ObjectId, ref: "Club" }, // Verwijzing naar club
     profielfoto: { type: String },
     role: {
       type: String,
@@ -48,6 +48,8 @@ const userSchema = new mongoose.Schema(
       required: true,
     },
     vechterInfo: vechterSchema,
+    trainerInfo: trainerSchema,
+    vkbmoLidInfo: vkbmoLidSchema,
   },
   { timestamps: true }
 );
