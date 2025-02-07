@@ -15,7 +15,12 @@ require("dotenv").config();
 var indexRouter = require("./routes/index");
 var app = express();
 
-app.use(cors());
+app.use(
+  cors({
+    origin: "http://localhost:5173", // Specifieke frontend-URL
+    credentials: true,
+  })
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(logger("dev"));
