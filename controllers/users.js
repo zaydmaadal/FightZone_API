@@ -1,4 +1,5 @@
 const User = require("../models/User");
+const Club = require("../models/Club");
 const bcrypt = require("bcryptjs");
 
 // Haalt alle users op
@@ -80,6 +81,12 @@ exports.createUser = async (req, res) => {
       userData.vkbmoLidInfo = vkbmoLidInfo; // Voeg vkbmoLidInfo toe voor VKBMO-leden
     }
 
+    // Nieuwe gebruiker aanmaken
+    const user = new User(userData);
+
+    // Sla op in de database
+    await user.save();
+
     if (role === "Vechter" || role === "Trainer") {
       const existingClub = await Club.findById(club);
       if (!existingClub) {
@@ -88,15 +95,9 @@ exports.createUser = async (req, res) => {
       userData.club = club; // Koppel de gebruiker aan de club
 
       // Gebruiker toevoegen aan de club
-      existingClub.leden.push(userData._id);
+      existingClub.leden.push(user._id);
       await existingClub.save();
     }
-
-    // Nieuwe gebruiker aanmaken
-    const user = new User(userData);
-
-    // Sla op in de database
-    await user.save();
 
     res.status(201).json({
       message: "Gebruiker succesvol aangemaakt",
