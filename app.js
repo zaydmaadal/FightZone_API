@@ -17,7 +17,7 @@ var app = express();
 
 app.use(
   cors({
-    origin: "http://localhost:5173, http://localhost:3000", // Specifieke frontend-URL
+    origin: "http://localhost:5173, http://localhost:3000, http://localhost:3001", // Specifieke frontend-URL
     credentials: true,
   })
 );
