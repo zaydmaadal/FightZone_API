@@ -29,7 +29,6 @@ exports.getUserById = async (req, res) => {
   }
 };
 
-// Voegt een nieuwe user toe
 exports.createUser = async (req, res) => {
   try {
     const {
@@ -38,74 +37,109 @@ exports.createUser = async (req, res) => {
       email,
       wachtwoord,
       geboortedatum,
-      club,
       profielfoto,
       role,
       vechterInfo,
       trainerInfo,
       vkbmoLidInfo,
+      // Licentievelden uit QR-scan
+      licentieNummer,
+      vervalDatum,
+      clubNaam, // Clubnaam uit VKBMO licentie
     } = req.body;
 
-    // Controleer verplichte velden
+    // Validatie van verplichte velden
     if (!voornaam || !achternaam || !email || !wachtwoord || !role) {
-      return res.status(400).json({ message: "Alle velden zijn verplicht" });
+      return res
+        .status(400)
+        .json({ message: "Alle basisvelden zijn verplicht" });
     }
 
-    // Controleer of de gebruiker al bestaat
+    // Extra validatie voor Vechters
+    if (role === "Vechter") {
+      if (!licentieNummer || !vervalDatum || !clubNaam) {
+        return res.status(400).json({
+          message: "Licentiegegevens ontbreken voor vechter",
+        });
+      }
+    }
+
+    // Controleer bestaande gebruiker
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ message: "Email is al in gebruik" });
     }
 
+    // Zoek club op basis van clubnaam uit licentie
+    let club;
+    if (clubNaam) {
+      club = await Club.findOne({ naam: clubNaam });
+      if (!club) {
+        return res.status(404).json({
+          message: `Club '${clubNaam}' niet gevonden`,
+        });
+      }
+    }
+
     // Wachtwoord hashen
     const hashedPassword = await bcrypt.hash(wachtwoord, 10);
 
-    // Maak een nieuw user-object op basis van de rol
+    // Basis user data
     const userData = {
       voornaam,
       achternaam,
       email,
       wachtwoord: hashedPassword,
-      geboortedatum,
-      club,
+      geboortedatum: new Date(geboortedatum),
       profielfoto,
       role,
+      club: club?._id, // Koppel gevonden club-ID
     };
 
-    // Voeg rol-specifieke informatie toe
+    // Rol-specifieke data
     if (role === "Vechter") {
-      userData.vechterInfo = vechterInfo;
+      userData.vechterInfo = {
+        ...vechterInfo,
+        licentieNummer,
+        vervalDatum: new Date(vervalDatum),
+        fightingReady: new Date(vervalDatum) > new Date(), // Auto status
+      };
+
+      // Controleer unieke licentie
+      const existingLicense = await User.findOne({
+        "vechterInfo.licentieNummer": licentieNummer,
+      });
+      if (existingLicense) {
+        return res.status(400).json({
+          message: "Licentienummer is al geregistreerd",
+        });
+      }
     } else if (role === "Trainer") {
-      userData.trainerInfo = trainerInfo; // Voeg trainerInfo toe voor trainers
+      userData.trainerInfo = trainerInfo;
     } else if (role === "VKBMO-lid") {
-      userData.vkbmoLidInfo = vkbmoLidInfo; // Voeg vkbmoLidInfo toe voor VKBMO-leden
+      userData.vkbmoLidInfo = vkbmoLidInfo;
     }
 
-    // Nieuwe gebruiker aanmaken
-    const user = new User(userData);
+    // Sla gebruiker op
+    const newUser = new User(userData);
+    await newUser.save();
 
-    // Sla op in de database
-    await user.save();
-
-    if (role === "Vechter" || role === "Trainer") {
-      const existingClub = await Club.findById(club);
-      if (!existingClub) {
-        return res.status(404).json({ message: "Club niet gevonden" });
-      }
-      userData.club = club; // Koppel de gebruiker aan de club
-
-      // Gebruiker toevoegen aan de club
-      existingClub.leden.push(user._id);
-      await existingClub.save();
+    // Voeg gebruiker toe aan clubleden
+    if (club && role === "Vechter") {
+      club.leden.push(newUser._id);
+      await club.save();
     }
 
     res.status(201).json({
       message: "Gebruiker succesvol aangemaakt",
-      user,
+      user: newUser,
     });
   } catch (error) {
-    console.error("Fout bij het maken van gebruiker:", error.message);
-    res.status(500).json({ message: "Serverfout", error: error.message });
+    console.error("Fout bij aanmaken gebruiker:", error.message);
+    res.status(500).json({
+      message: "Serverfout",
+      error: error.message,
+    });
   }
 };
 

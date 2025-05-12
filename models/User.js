@@ -19,7 +19,8 @@ const vechterSchema = new mongoose.Schema({
   klasse: { type: String }, // Vechtklasse
   bijnaam: { type: String }, // Bijnaam van de vechter
   fights: [fightSchema], // Array van gevechten
-  verzekering: { type: Boolean, default: true }, // Of de vechter verzekerd is
+  licentieNummer: { type: String, unique: true },
+  vervalDatum: Date,
   fightingReady: { type: Boolean, default: true }, // Of de vechter klaar is om te vechten
 });
 
