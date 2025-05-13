@@ -31,118 +31,101 @@ exports.getUserById = async (req, res) => {
 
 exports.createUser = async (req, res) => {
   try {
+    const trainer = await User.findById(req.user.id).populate("club");
+
+    // Valideer trainer
+    if (!trainer || trainer.role !== "Trainer") {
+      return res
+        .status(403)
+        .json({ message: "Alleen trainers kunnen vechters aanmaken" });
+    }
+
     const {
       voornaam,
       achternaam,
       email,
       wachtwoord,
       geboortedatum,
-      profielfoto,
-      role,
-      vechterInfo,
-      trainerInfo,
-      vkbmoLidInfo,
-      // Licentievelden uit QR-scan
       licentieNummer,
       vervalDatum,
-      clubNaam, // Clubnaam uit VKBMO licentie
+      vechterInfo,
     } = req.body;
 
-    // Validatie van verplichte velden
-    if (!voornaam || !achternaam || !email || !wachtwoord || !role) {
+    // Basis validaties
+    const requiredFields = [
+      "voornaam",
+      "achternaam",
+      "email",
+      "wachtwoord",
+      "geboortedatum",
+      "licentieNummer",
+      "vervalDatum",
+    ];
+    const missing = requiredFields.filter((field) => !req.body[field]);
+    if (missing.length > 0) {
+      return res.status(400).json({
+        message: `Ontbrekende velden: ${missing.join(", ")}`,
+      });
+    }
+
+    // Controleer unieke velden
+    const [existingEmail, existingLicense] = await Promise.all([
+      User.findOne({ email }),
+      User.findOne({ "vechterInfo.licentieNummer": licentieNummer }),
+    ]);
+
+    if (existingEmail) {
+      return res.status(400).json({ message: "Email al in gebruik" });
+    }
+    if (existingLicense) {
       return res
         .status(400)
-        .json({ message: "Alle basisvelden zijn verplicht" });
+        .json({ message: "Licentienummer al geregistreerd" });
     }
 
-    // Extra validatie voor Vechters
-    if (role === "Vechter") {
-      if (!licentieNummer || !vervalDatum || !clubNaam) {
-        return res.status(400).json({
-          message: "Licentiegegevens ontbreken voor vechter",
-        });
-      }
-    }
-
-    // Controleer bestaande gebruiker
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: "Email is al in gebruik" });
-    }
-
-    // Zoek club op basis van clubnaam uit licentie
-    let club;
-    if (clubNaam) {
-      club = await Club.findOne({ naam: clubNaam });
-      if (!club) {
-        return res.status(404).json({
-          message: `Club '${clubNaam}' niet gevonden`,
-        });
-      }
-    }
-
-    // Wachtwoord hashen
+    // Maak gebruiker aan
     const hashedPassword = await bcrypt.hash(wachtwoord, 10);
 
-    // Basis user data
-    const userData = {
+    const newUser = new User({
       voornaam,
       achternaam,
       email,
       wachtwoord: hashedPassword,
       geboortedatum: new Date(geboortedatum),
-      profielfoto,
-      role,
-      club: club?._id, // Koppel gevonden club-ID
-    };
-
-    // Rol-specifieke data
-    if (role === "Vechter") {
-      userData.vechterInfo = {
+      role: "Vechter",
+      club: trainer.club._id,
+      vechterInfo: {
         ...vechterInfo,
         licentieNummer,
         vervalDatum: new Date(vervalDatum),
-        fightingReady: new Date(vervalDatum) > new Date(), // Auto status
-      };
+        fightingReady: new Date(vervalDatum) > new Date(),
+      },
+    });
 
-      // Controleer unieke licentie
-      const existingLicense = await User.findOne({
-        "vechterInfo.licentieNummer": licentieNummer,
-      });
-      if (existingLicense) {
-        return res.status(400).json({
-          message: "Licentienummer is al geregistreerd",
-        });
-      }
-    } else if (role === "Trainer") {
-      userData.trainerInfo = trainerInfo;
-    } else if (role === "VKBMO-lid") {
-      userData.vkbmoLidInfo = vkbmoLidInfo;
-    }
-
-    // Sla gebruiker op
-    const newUser = new User(userData);
     await newUser.save();
 
-    // Voeg gebruiker toe aan clubleden
-    if (club && role === "Vechter") {
-      club.leden.push(newUser._id);
-      await club.save();
-    }
+    // Update club leden
+    await Club.findByIdAndUpdate(trainer.club._id, {
+      $addToSet: { leden: newUser._id },
+    });
 
     res.status(201).json({
-      message: "Gebruiker succesvol aangemaakt",
-      user: newUser,
+      message: "Vechter succesvol geregistreerd",
+      user: {
+        _id: newUser._id,
+        voornaam: newUser.voornaam,
+        achternaam: newUser.achternaam,
+        email: newUser.email,
+        licentieNummer: newUser.vechterInfo.licentieNummer,
+      },
     });
   } catch (error) {
-    console.error("Fout bij aanmaken gebruiker:", error.message);
+    console.error("Registratiefout:", error);
     res.status(500).json({
-      message: "Serverfout",
-      error: error.message,
+      message: error.message || "Serverfout tijdens registratie",
     });
   }
 };
-
 exports.createMultipleUsers = async (req, res) => {
   try {
     const usersData = req.body; // Verwacht een array van gebruikers
