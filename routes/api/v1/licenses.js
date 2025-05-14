@@ -5,11 +5,20 @@ const axios = require("axios");
 const cheerio = require("cheerio");
 const User = require("../../../models/User");
 const Club = require("../../../models/Club");
+const authMiddleware = require("../../../middleware/auth");
+router.use(authMiddleware);
 
 router.post("/validate", async (req, res) => {
   try {
     const { qrCodeUrl } = req.body;
+    console.log("Ontvangen QR URL:", req.body.qrCodeUrl);
     const trainer = await User.findById(req.user.id).populate("club");
+
+    console.log("Ingelogde trainer:", {
+      id: trainer?._id,
+      club: trainer?.club?.naam,
+      role: trainer?.role,
+    });
 
     // 1. Valideer trainer
     if (!trainer || trainer.role !== "Trainer") {
@@ -73,28 +82,27 @@ router.post("/validate", async (req, res) => {
 function parseVkbmoHTML(html) {
   const $ = cheerio.load(html);
 
-  // Controleer op "Lid niet gevonden"
-  if ($('span:contains("Lid niet gevonden")').length > 0) {
-    throw new Error("Licentie niet gevonden bij VKBMO");
+  // Controleer op lid niet gevonden
+  if ($('div:contains("LICENSE VALID")').length === 0) {
+    throw new Error("Licentie niet geldig of verlopen");
   }
 
-  // Extraheer cruciale velden
+  // Nieuwe selectors voor de huidige HTML-structuur
   const result = {
-    licentieNummer: $("#lidbox span:contains('Lic nr:') + b").text().trim(),
-    rawNaam: $("#lidbox span:contains('Naam:') + b").text().trim(),
-    clubNaam: $("#lidbox span:contains('Club:')").next().text().trim(),
-    vervalDatum: $("#lidbox span:contains('Vervaldatum:')")
-      .next()
-      .text()
-      .trim(),
+    licentieNummer: $('span:contains("Lic nr:")').next().text().trim(),
+    rawNaam: $('span:contains("Naam:")').next("b").text().trim(),
+    clubNaam: $('span:contains("Club:")').next().text().trim(),
+    vervalDatum: $('span:contains("Vervaldatum:")').next().text().trim(),
   };
 
-  // Valideer verplichte velden
-  if (!result.licentieNummer || !result.vervalDatum || !result.clubNaam) {
-    throw new Error("Ontbrekende licentiegegevens in de HTML");
+  // Debug logging
+  console.log("Geparseerde licentie data:", result);
+
+  if (!result.vervalDatum || !result.licentieNummer) {
+    throw new Error("Ontbrekende licentiegegevens");
   }
 
-  // Converteer datum (DD/MM/YYYY => YYYY-MM-DD)
+  // Datumconversie fix (DD/MM/YYYY => ISO)
   const [day, month, year] = result.vervalDatum.split("/");
   result.vervalDatum = new Date(`${year}-${month}-${day}`);
 
