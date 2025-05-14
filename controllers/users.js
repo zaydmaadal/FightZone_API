@@ -31,15 +31,6 @@ exports.getUserById = async (req, res) => {
 
 exports.createUser = async (req, res) => {
   try {
-    const trainer = await User.findById(req.user.id).populate("club");
-
-    // Valideer trainer
-    if (!trainer || trainer.role !== "Trainer") {
-      return res
-        .status(403)
-        .json({ message: "Alleen trainers kunnen vechters aanmaken" });
-    }
-
     const {
       voornaam,
       achternaam,
@@ -52,35 +43,29 @@ exports.createUser = async (req, res) => {
     } = req.body;
 
     // Basis validaties
-    const requiredFields = [
-      "voornaam",
-      "achternaam",
-      "email",
-      "wachtwoord",
-      "geboortedatum",
-      "licentieNummer",
-      "vervalDatum",
-    ];
-    const missing = requiredFields.filter((field) => !req.body[field]);
-    if (missing.length > 0) {
-      return res.status(400).json({
-        message: `Ontbrekende velden: ${missing.join(", ")}`,
-      });
+    if (
+      !voornaam ||
+      !achternaam ||
+      !email ||
+      !wachtwoord ||
+      !geboortedatum ||
+      !licentieNummer
+    ) {
+      return res.status(400).json({ message: "Ontbrekende verplichte velden" });
     }
 
     // Controleer unieke velden
-    const [existingEmail, existingLicense] = await Promise.all([
-      User.findOne({ email }),
-      User.findOne({ "vechterInfo.licentieNummer": licentieNummer }),
-    ]);
+    const existingUser = await User.findOne({
+      $or: [{ email }, { "vechterInfo.licentieNummer": licentieNummer }],
+    });
 
-    if (existingEmail) {
-      return res.status(400).json({ message: "Email al in gebruik" });
-    }
-    if (existingLicense) {
-      return res
-        .status(400)
-        .json({ message: "Licentienummer al geregistreerd" });
+    if (existingUser) {
+      return res.status(400).json({
+        message:
+          existingUser.email === email
+            ? "Email al in gebruik"
+            : "Licentienummer al geregistreerd",
+      });
     }
 
     // Maak gebruiker aan
@@ -93,7 +78,6 @@ exports.createUser = async (req, res) => {
       wachtwoord: hashedPassword,
       geboortedatum: new Date(geboortedatum),
       role: "Vechter",
-      club: trainer.club._id,
       vechterInfo: {
         ...vechterInfo,
         licentieNummer,
@@ -104,28 +88,16 @@ exports.createUser = async (req, res) => {
 
     await newUser.save();
 
-    // Update club leden
-    await Club.findByIdAndUpdate(trainer.club._id, {
-      $addToSet: { leden: newUser._id },
-    });
-
     res.status(201).json({
       message: "Vechter succesvol geregistreerd",
-      user: {
-        _id: newUser._id,
-        voornaam: newUser.voornaam,
-        achternaam: newUser.achternaam,
-        email: newUser.email,
-        licentieNummer: newUser.vechterInfo.licentieNummer,
-      },
+      userId: newUser._id,
     });
   } catch (error) {
-    console.error("Registratiefout:", error);
-    res.status(500).json({
-      message: error.message || "Serverfout tijdens registratie",
-    });
+    console.error("Fout:", error);
+    res.status(500).json({ message: "Serverfout" });
   }
 };
+
 exports.createMultipleUsers = async (req, res) => {
   try {
     const usersData = req.body; // Verwacht een array van gebruikers
