@@ -72,31 +72,31 @@ router.post("/validate", async (req, res) => {
 
 function parseVkbmoHTML(html) {
   const $ = cheerio.load(html);
-  const errorCheck = $('span:contains("Lid niet gevonden")').text();
-  if (errorCheck) throw new Error("Licentie niet gevonden bij VKBMO");
 
-  const content = $("#lidbox").text();
+  // Controleer op "Lid niet gevonden"
+  if ($('span:contains("Lid niet gevonden")').length > 0) {
+    throw new Error("Licentie niet gevonden bij VKBMO");
+  }
 
-  // Regex patterns
-  const patterns = {
-    licentieNummer: /Lic nr:\s*(\d+)/,
-    vervalDatum: /Vervaldatum:\s*(\d{2}\/\d{2}\/\d{4})/,
-    clubNaam: /Club:\s*(.*?)(\n|$)/,
-    rawNaam: /Naam:\s*<b>(.*?)<\/b>/,
+  // Extraheer cruciale velden
+  const result = {
+    licentieNummer: $("#lidbox span:contains('Lic nr:') + b").text().trim(),
+    rawNaam: $("#lidbox span:contains('Naam:') + b").text().trim(),
+    clubNaam: $("#lidbox span:contains('Club:')").next().text().trim(),
+    vervalDatum: $("#lidbox span:contains('Vervaldatum:')")
+      .next()
+      .text()
+      .trim(),
   };
 
-  const result = {};
-  for (const [key, regex] of Object.entries(patterns)) {
-    const match = content.match(regex);
-    if (!match && key !== "rawNaam") throw new Error(`Ontbrekend veld: ${key}`);
-    result[key] = match ? match[1] : null;
+  // Valideer verplichte velden
+  if (!result.licentieNummer || !result.vervalDatum || !result.clubNaam) {
+    throw new Error("Ontbrekende licentiegegevens in de HTML");
   }
 
-  // Datumconversie
-  if (result.vervalDatum) {
-    const [day, month, year] = result.vervalDatum.split("/");
-    result.vervalDatum = new Date(`${year}-${month}-${day}`);
-  }
+  // Converteer datum (DD/MM/YYYY => YYYY-MM-DD)
+  const [day, month, year] = result.vervalDatum.split("/");
+  result.vervalDatum = new Date(`${year}-${month}-${day}`);
 
   return result;
 }
