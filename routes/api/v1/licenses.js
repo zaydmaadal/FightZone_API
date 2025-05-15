@@ -68,7 +68,7 @@ function parseVkbmoHTML(html) {
     return value || null;
   };
 
-  // Extract velden met specifieke logica per veld
+  // Extract alle velden
   const licentieNummer =
     getFieldValue("Lic nr:") ||
     $("#lidbox")
@@ -86,11 +86,22 @@ function parseVkbmoHTML(html) {
       .text()
       .match(/Club:\s*([^\n]+)/)?.[1]
       ?.trim();
-  let vervaldatum =
+  const vervaldatum =
     getFieldValue("Vervaldatum:") ||
     $("#lidbox")
       .text()
       .match(/Vervaldatum:\s*([^\n]+)/)?.[1]
+      ?.trim();
+  const geboortedatum =
+    getFieldValue("Geb datum:") ||
+    html
+      .match(/<!--\s*<span[^>]*>Geb datum:<\/span>\s*([^<]+)<br>\s*-->/)?.[1]
+      ?.trim();
+  const geslacht =
+    getFieldValue("Geslacht:") ||
+    $("#lidbox")
+      .text()
+      .match(/Geslacht:\s*([^\n]+)/)?.[1]
       ?.trim();
 
   // Debug logging
@@ -99,6 +110,8 @@ function parseVkbmoHTML(html) {
     naam,
     club,
     vervaldatum,
+    geboortedatum,
+    geslacht,
   });
 
   // Valideer verplichte velden
@@ -109,26 +122,30 @@ function parseVkbmoHTML(html) {
         naam,
         club,
         vervaldatum,
+        geboortedatum,
+        geslacht,
       })}`
     );
   }
 
-  // Controleer alleen of het een geldige datum is
-  const dateParts = vervaldatum.split("/");
-  if (dateParts.length !== 3) {
-    throw new Error(`Ongeldig datumformaat: ${vervaldatum}`);
-  }
+  // Controleer datumformaten
+  const validateDate = (dateStr) => {
+    if (!dateStr) return true;
+    const parts = dateStr.split("/");
+    return parts.length === 3 && !parts.some(isNaN);
+  };
 
-  const [day, month, year] = dateParts;
-  if (isNaN(day) || isNaN(month) || isNaN(year)) {
-    throw new Error(`Ongeldige datum: ${vervaldatum}`);
+  if (!validateDate(vervaldatum) || !validateDate(geboortedatum)) {
+    throw new Error(`Ongeldig datumformaat`);
   }
 
   return {
     licentieNummer,
     naam,
     club,
-    vervaldatum, // Behoud origineel formaat dd/mm/yyyy
+    vervaldatum, // dd/mm/yyyy
+    geboortedatum: geboortedatum || null, // dd/mm/yyyy (optioneel)
+    geslacht: geslacht || null, // M/V (optioneel)
   };
 }
 
