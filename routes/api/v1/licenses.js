@@ -8,14 +8,34 @@ router.post("/validate", async (req, res) => {
   try {
     const { qrCodeUrl } = req.body;
 
-    if (!qrCodeUrl || !qrCodeUrl.includes("vkbmolink.be/qr_lid.php")) {
+    // Aangepaste validatie voor beide URL formaten
+    if (!qrCodeUrl || !qrCodeUrl.includes("vkbmolink.be")) {
       return res.status(400).json({
         valid: false,
         message: "Ongeldige VKBMO URL",
       });
     }
 
-    const response = await axios.get(qrCodeUrl);
+    // Controleer of het een geldige licentie URL is
+    const isOldFormat = qrCodeUrl.includes("qr_lid.php?lk=");
+    const isNewFormat = qrCodeUrl.includes("qr.php?");
+
+    if (!isOldFormat && !isNewFormat) {
+      return res.status(400).json({
+        valid: false,
+        message: "Ongeldige URL-structuur",
+      });
+    }
+
+    // Maak de uiteindelijke request URL
+    let finalUrl = qrCodeUrl;
+
+    // Als het een nieuwe hash-based URL is, voeg .php toe voor compatibiliteit
+    if (isNewFormat) {
+      finalUrl = qrCodeUrl.replace(/qr(\?|%3F)/, "qr.php?");
+    }
+
+    const response = await axios.get(finalUrl);
     const licenseData = parseVkbmoHTML(response.data);
 
     res.json({
