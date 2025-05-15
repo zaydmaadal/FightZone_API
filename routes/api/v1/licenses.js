@@ -15,14 +15,25 @@ router.post("/validate", async (req, res) => {
       });
     }
 
-    // Converteer hash-based URLs naar het oude formaat
-    let finalUrl = qrCodeUrl;
-    if (qrCodeUrl.includes("qr.php?")) {
-      const licenseKey = qrCodeUrl.split("?")[1].split("&")[0];
-      finalUrl = `https://vkbmolink.be/qr_lid.php?lk=${licenseKey}`;
+    // Laat Axios automatisch redirects volgen
+    const response = await axios.get(qrCodeUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; FightZone/1.0)",
+        "Accept-Language": "nl-BE,nl;q=0.9",
+      },
+      maxRedirects: 5, // Sta maximaal 5 redirects toe
+    });
+
+    // Gebruik de uiteindelijke URL na redirects
+    const finalUrl = response.request.res.responseUrl || qrCodeUrl;
+    console.log("Final URL after redirects:", finalUrl);
+
+    // Controleer of we op de juiste pagina zijn beland
+    if (!finalUrl.includes("qr_lid.php")) {
+      throw new Error("Ongeldige licentie URL - verwachtte qr_lid.php pagina");
     }
 
-    const response = await axios.get(finalUrl);
+    // Gebruik de bestaande parser
     const licenseData = parseVkbmoHTML(response.data);
 
     res.json({
@@ -41,57 +52,75 @@ router.post("/validate", async (req, res) => {
 function parseVkbmoHTML(html) {
   const $ = cheerio.load(html);
 
-  // Nieuwe error checks
-  const errorMessages = [
-    "Lid niet gevonden",
-    "Invalid license",
-    "404",
-    "niet actief",
-  ];
-
-  if (
-    errorMessages.some((msg) => html.toLowerCase().includes(msg.toLowerCase()))
-  ) {
-    throw new Error("Licentie niet gevonden of ongeldig");
+  // Controleer op ongeldige licentie
+  if ($('span:contains("Lid niet gevonden (3)!")').length > 0) {
+    throw new Error("Lid niet gevonden bij VKBMO");
   }
 
-  // Aangepaste veldextractie
-  const extractField = (label) => {
-    // Probeer beide formaten
-    const elements = [
-      $(`span:contains('${label}')`).first(),
-      $(`div:contains('${label}')`).first(),
-    ];
+  // Helper functie voor betrouwbare veldextractie
+  const getFieldValue = (label) => {
+    const labelElement = $(`span:contains('${label}')`).first();
 
-    for (const el of elements) {
-      if (el.length) {
-        const value = el.next().text().trim();
-        if (value) return value;
-      }
+    if (!labelElement.length) {
+      console.warn(`Label '${label}' niet gevonden`);
+      return null;
     }
 
-    return null;
+    // Speciaal geval voor Naam (bevat <b> tag)
+    if (label === "Naam:") {
+      return labelElement.next("b").text().trim();
+    }
+
+    // Voor andere velden: neem de direct volgende tekst
+    let value = "";
+    let nextNode = labelElement[0].next;
+
+    while (nextNode) {
+      if (nextNode.type === "text") {
+        value += $(nextNode).text().trim();
+        break;
+      }
+      nextNode = nextNode.next;
+    }
+
+    return value || null;
   };
 
-  // Extract velden
+  // Extract alle velden
   const licentieNummer =
-    extractField("Lic nr:") || html.match(/Licentie nr:?\s*(\d+)/i)?.[1];
-
-  const naam = extractField("Naam:") || $("b").first().text().trim();
-
+    getFieldValue("Lic nr:") ||
+    $("#lidbox")
+      .text()
+      .match(/Lic nr:\s*(\d+)/)?.[1];
+  const naam =
+    getFieldValue("Naam:") ||
+    $("#lidbox")
+      .text()
+      .match(/Naam:\s*([^\n]+)/)?.[1]
+      ?.trim();
   const club =
-    extractField("Club:") || html.match(/Club:?\s*([^\n<]+)/i)?.[1]?.trim();
-
+    getFieldValue("Club:") ||
+    $("#lidbox")
+      .text()
+      .match(/Club:\s*([^\n]+)/)?.[1]
+      ?.trim();
   const vervaldatum =
-    extractField("Vervaldatum:") ||
-    html.match(/Vervaldatum:?\s*(\d{2}\/\d{2}\/\d{4})/i)?.[1];
-
+    getFieldValue("Vervaldatum:") ||
+    $("#lidbox")
+      .text()
+      .match(/Vervaldatum:\s*([^\n]+)/)?.[1]
+      ?.trim();
   const geboortedatum =
-    extractField("Geb datum:") ||
-    html.match(/Geb datum:?\s*(\d{2}\/\d{2}\/\d{4})/i)?.[1];
-
+    getFieldValue("Geb datum:") ||
+    html
+      .match(/<!--\s*<span[^>]*>Geb datum:<\/span>\s*([^<]+)<br>\s*-->/)?.[1]
+      ?.trim();
   const geslacht =
-    extractField("Geslacht:") || html.match(/Geslacht:?\s*([MV])/i)?.[1];
+    getFieldValue("Geslacht:") ||
+    $("#lidbox")
+      .text()
+      .match(/Geslacht:\s*([^\n]+)/)?.[1]
+      ?.trim();
 
   // Debug logging
   console.log("Extracted values:", {
