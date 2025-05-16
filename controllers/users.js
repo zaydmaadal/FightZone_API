@@ -29,6 +29,11 @@ exports.getUserById = async (req, res) => {
   }
 };
 
+const User = require("../models/User");
+const Club = require("../models/Club");
+const bcrypt = require("bcryptjs");
+
+// Create Single User (Aangepaste versie)
 exports.createUser = async (req, res) => {
   try {
     const {
@@ -40,56 +45,80 @@ exports.createUser = async (req, res) => {
       licentieNummer,
       vervalDatum,
       vechterInfo,
+      club,
+      role = "Vechter", // Default naar Vechter
     } = req.body;
 
-    // Basis validaties
-    if (
-      !voornaam ||
-      !achternaam ||
-      !email ||
-      !wachtwoord ||
-      !geboortedatum ||
-      !licentieNummer
-    ) {
+    // Basis validaties voor alle gebruikers
+    if (!voornaam || !achternaam || !email || !wachtwoord || !geboortedatum) {
       return res.status(400).json({ message: "Ontbrekende verplichte velden" });
     }
 
-    // Controleer unieke velden
-    const existingUser = await User.findOne({
-      $or: [{ email }, { "vechterInfo.licentieNummer": licentieNummer }],
-    });
+    // Rol-specifieke validaties
+    if (role === "Vechter") {
+      if (!licentieNummer) {
+        return res
+          .status(400)
+          .json({ message: "Licentienummer is verplicht voor vechters" });
+      }
 
-    if (existingUser) {
-      return res.status(400).json({
-        message:
-          existingUser.email === email
-            ? "Email al in gebruik"
-            : "Licentienummer al geregistreerd",
+      // Controleer uniek licentienummer alleen voor vechters
+      const existingLicense = await User.findOne({
+        "vechterInfo.licentieNummer": licentieNummer,
       });
+      if (existingLicense) {
+        return res
+          .status(400)
+          .json({ message: "Licentienummer al geregistreerd" });
+      }
+    }
+
+    // Algemene email check
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: "Email al in gebruik" });
     }
 
     // Maak gebruiker aan
     const hashedPassword = await bcrypt.hash(wachtwoord, 10);
-
-    const newUser = new User({
+    const userData = {
       voornaam,
       achternaam,
       email,
       wachtwoord: hashedPassword,
       geboortedatum: new Date(geboortedatum),
-      role: "Vechter",
-      vechterInfo: {
+      role,
+      club,
+    };
+
+    // Voeg rol-specifieke data toe
+    if (role === "Vechter") {
+      userData.vechterInfo = {
         ...vechterInfo,
         licentieNummer,
         vervalDatum: new Date(vervalDatum),
         fightingReady: new Date(vervalDatum) > new Date(),
-      },
-    });
+      };
+    } else if (role === "Trainer") {
+      userData.trainerInfo = req.body.trainerInfo;
+    } else if (role === "VKBMO-lid") {
+      userData.vkbmoLidInfo = req.body.vkbmoLidInfo;
+    }
 
+    const newUser = new User(userData);
     await newUser.save();
 
+    // Voeg gebruiker toe aan club
+    if (club) {
+      const existingClub = await Club.findById(club);
+      if (existingClub) {
+        existingClub.leden.push(newUser._id);
+        await existingClub.save();
+      }
+    }
+
     res.status(201).json({
-      message: "Vechter succesvol geregistreerd",
+      message: `${role} succesvol geregistreerd`,
       userId: newUser._id,
     });
   } catch (error) {
@@ -98,17 +127,17 @@ exports.createUser = async (req, res) => {
   }
 };
 
+// Create Multiple Users (Aangepaste versie)
 exports.createMultipleUsers = async (req, res) => {
   try {
-    const usersData = req.body; // Verwacht een array van gebruikers
+    const usersData = req.body;
 
     if (!Array.isArray(usersData) || usersData.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "Een array met gebruikers is verplicht" });
+      return res.status(400).json({ message: "Ongeldige gebruikersdata" });
     }
 
     const createdUsers = [];
+    const clubUpdates = {};
 
     for (const userData of usersData) {
       const {
@@ -117,61 +146,82 @@ exports.createMultipleUsers = async (req, res) => {
         email,
         wachtwoord,
         geboortedatum,
-        role,
-        club,
-        profielfoto,
+        licentieNummer,
+        vervalDatum,
         vechterInfo,
-        trainerInfo,
-        vkbmoLidInfo,
+        club,
+        role = "Vechter",
       } = userData;
 
-      // Controleer verplichte velden
-      if (!voornaam || !achternaam || !email || !wachtwoord || !role) {
-        return res.status(400).json({ message: "Alle velden zijn verplicht" });
+      // Basis validatie
+      if (!voornaam || !achternaam || !email || !wachtwoord || !geboortedatum) {
+        continue;
       }
 
-      // Controleer of de gebruiker al bestaat
+      // Rol-specifieke validatie
+      if (role === "Vechter" && !licentieNummer) {
+        continue;
+      }
+
+      // Controleer unieke velden
       const existingUser = await User.findOne({ email });
-      if (existingUser) {
-        return res
-          .status(400)
-          .json({ message: `Email ${email} is al in gebruik` });
+      if (existingUser) continue;
+
+      if (role === "Vechter") {
+        const existingLicense = await User.findOne({
+          "vechterInfo.licentieNummer": licentieNummer,
+        });
+        if (existingLicense) continue;
       }
 
-      // Wachtwoord hashen
+      // Maak gebruiker
       const hashedPassword = await bcrypt.hash(wachtwoord, 10);
-
-      const newUser = new User({
+      const newUserData = {
         voornaam,
         achternaam,
         email,
         wachtwoord: hashedPassword,
-        geboortedatum,
+        geboortedatum: new Date(geboortedatum),
         role,
         club,
-        profielfoto,
-      });
+      };
 
-      // Voeg rol-specifieke informatie toe
       if (role === "Vechter") {
-        newUser.vechterInfo = vechterInfo;
-      } else if (role === "Trainer") {
-        newUser.trainerInfo = trainerInfo;
-      } else if (role === "VKBMO-lid") {
-        newUser.vkbmoLidInfo = vkbmoLidInfo;
+        newUserData.vechterInfo = {
+          ...vechterInfo,
+          licentieNummer,
+          vervalDatum: new Date(vervalDatum),
+          fightingReady: new Date(vervalDatum) > new Date(),
+        };
       }
 
+      const newUser = new User(newUserData);
       await newUser.save();
       createdUsers.push(newUser);
+
+      // Update club
+      if (club) {
+        if (!clubUpdates[club]) clubUpdates[club] = [];
+        clubUpdates[club].push(newUser._id);
+      }
+    }
+
+    // Update clubs
+    for (const [clubId, userIds] of Object.entries(clubUpdates)) {
+      await Club.findByIdAndUpdate(
+        clubId,
+        { $push: { leden: { $each: userIds } } },
+        { new: true }
+      );
     }
 
     res.status(201).json({
-      message: "Gebruikers succesvol aangemaakt",
+      message: `${createdUsers.length} gebruiker(s) aangemaakt`,
       users: createdUsers,
     });
   } catch (error) {
-    console.error("Fout bij het maken van gebruikers:", error.message);
-    res.status(500).json({ message: "Serverfout", error: error.message });
+    console.error("Fout:", error);
+    res.status(500).json({ message: "Serverfout" });
   }
 };
 
