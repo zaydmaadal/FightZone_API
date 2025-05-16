@@ -16,12 +16,25 @@ require("dotenv").config();
 var indexRouter = require("./routes/index");
 var app = express();
 
+const allowedOrigins = ["http://localhost:3000"];
+
 app.use(
   cors({
-    origin: "*", // Specifieke frontend-URL
-    credentials: true,
+    origin: function (origin, callback) {
+      // Sta requests zonder origin toe (like mobile apps)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.indexOf(origin) === -1) {
+        const msg = "CORS-beleid staat toegang vanaf deze origin niet toe";
+        return callback(new Error(msg), false);
+      }
+      return callback(null, true);
+    },
+    credentials: true, // Access-Control-Allow-Credentials
+    exposedHeaders: ["Authorization"], // Belangrijk voor JWT tokens
   })
 );
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(logger("dev"));
