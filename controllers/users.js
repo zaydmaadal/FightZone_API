@@ -29,10 +29,6 @@ exports.getUserById = async (req, res) => {
   }
 };
 
-const User = require("../models/User");
-const Club = require("../models/Club");
-const bcrypt = require("bcryptjs");
-
 // Create Single User (Aangepaste versie)
 exports.createUser = async (req, res) => {
   try {
