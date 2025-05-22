@@ -16,7 +16,7 @@ require("dotenv").config();
 var indexRouter = require("./routes/index");
 var app = express();
 
-const allowedOrigins = ["http://localhost:3000"];
+const allowedOrigins = ["http://localhost:3000", "https://app.fightzone.site"];
 
 app.use(
   cors({
