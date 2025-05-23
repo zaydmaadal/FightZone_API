@@ -374,3 +374,39 @@ exports.updateGevechtResultaat = async (req, res) => {
     res.status(500).json({ message: "Serverfout", error: error.message });
   }
 };
+
+// Verwijdert een specifieke user
+exports.deleteUserById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Zoek en verwijder de gebruiker
+    const deletedUser = await User.findByIdAndDelete(id);
+
+    if (!deletedUser) {
+      return res.status(404).json({ message: "Gebruiker niet gevonden." });
+    }
+
+    // Als de gebruiker bij een club zat, verwijder deze uit de club
+    if (deletedUser.club) {
+      await Club.findByIdAndUpdate(deletedUser.club, {
+        $pull: { leden: deletedUser._id },
+      });
+    }
+
+    res.status(200).json({
+      message: "Gebruiker succesvol verwijderd",
+      deletedUser: {
+        id: deletedUser._id,
+        voornaam: deletedUser.voornaam,
+        achternaam: deletedUser.achternaam,
+        email: deletedUser.email,
+      },
+    });
+  } catch (error) {
+    console.error("Fout bij verwijderen gebruiker:", error);
+    res.status(500).json({ message: "Serverfout", error: error.message });
+  }
+};
+
+module.exports = exports;
