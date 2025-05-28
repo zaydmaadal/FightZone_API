@@ -1,6 +1,13 @@
 const axios = require('axios');
 const Event = require('../models/Event');
 
+function combineDateTime(dateStr, hour, minutes) {
+  if (!dateStr) return null;
+  const pad = n => n.toString().padStart(2, '0');
+  // Default to 0 if hour/minutes are undefined
+  return `${dateStr}T${pad(hour || 0)}:${pad(minutes || 0)}:00+02:00`;
+}
+
 // Sync events from VKBMO API
 exports.syncEvents = async (req, res) => {
   try {
@@ -17,27 +24,42 @@ exports.syncEvents = async (req, res) => {
     const vkbmoEvents = response.data.project.data.events;
     const syncedEvents = [];
 
-    // Process each event
     for (const vkbmoEvent of vkbmoEvents) {
+      // Combine start and end datetime
+      let start, end;
+      if (vkbmoEvent.allday) {
+        start = vkbmoEvent.startDate;
+        end = vkbmoEvent.endDate;
+      } else {
+        start = combineDateTime(
+          vkbmoEvent.startDate,
+          vkbmoEvent.startHour,
+          vkbmoEvent.startMinutes
+        );
+        end = combineDateTime(
+          vkbmoEvent.endDate,
+          vkbmoEvent.endHour,
+          vkbmoEvent.endMinutes
+        );
+      }
+
       // Check if event already exists
       const existingEvent = await Event.findOne({ 
         title: vkbmoEvent.title,
-        start: new Date(vkbmoEvent.start)
+        start: new Date(start)
       });
 
       if (!existingEvent) {
-        // Create new event
         const newEvent = new Event({
           title: vkbmoEvent.title,
           description: vkbmoEvent.description || '',
-          start: new Date(vkbmoEvent.start),
-          end: new Date(vkbmoEvent.end),
+          start: new Date(start),
+          end: new Date(end),
           location: vkbmoEvent.location || 'Locatie niet gespecificeerd',
           createdBy: 'vkbmo-sync',
           type: 'vkbmo',
           visibility: 'public'
         });
-
         await newEvent.save();
         syncedEvents.push(newEvent);
       }
