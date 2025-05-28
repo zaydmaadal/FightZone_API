@@ -10,8 +10,8 @@ const usersRoutes = require("./routes/api/v1/users");
 const authRoutes = require("./routes/api/v1/auth");
 const clubsRoutes = require("./routes/api/v1/clubs");
 const licenseRoutes = require("./routes/api/v1/licenses");
-const eventsRoutes = require("./routes/events");
-const vkbmoSyncRoutes = require("./routes/vkbmo-sync");
+const eventsRoutes = require("./routes/api/v1/events");
+const vkbmoSyncRoutes = require("./routes/api/v1/vkbmo-sync");
 
 require("dotenv").config();
 

@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const fetch = require('node-fetch');
-const { connectToDatabase } = require('../config/db');
+const { connectToDatabase } = require("../../../config/db");
+const vkbmoSyncController = require('../../../controllers/vkbmoSync');
 
 const DATA_API_URL = 'https://inffuse.eventscalendar.co/js/v0.1/calendar/data?inffuse-platform=weebly&inffuse-user=134849841&inffuse-site=270538925224280173&inffuse-project=9ec8a24a-f8de-4208-a693-04800cd55286';
 
@@ -56,5 +57,8 @@ router.post('/', async (req, res) => {
     res.status(500).json({ error: 'Error syncing VKBMO events', details: error.message });
   }
 });
+
+// Sync events from VKBMO (public route)
+router.post('/sync', vkbmoSyncController.syncEvents);
 
 module.exports = router; 
