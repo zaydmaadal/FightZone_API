@@ -28,6 +28,11 @@ exports.getEventById = async (req, res) => {
 // Create new event
 exports.createEvent = async (req, res) => {
   try {
+    // Controleer of user bestaat en juiste rol heeft
+    if (!req.user || !['Trainer', 'VKBMO-lid'].includes(req.user.role)) {
+      return res.status(403).json({ error: 'Alleen trainers en VKBMO-leden mogen events toevoegen.' });
+    }
+
     const { title, description, start, end, location, type, club, trainer, visibility } = req.body;
     
     // Add createdBy from the authenticated user
