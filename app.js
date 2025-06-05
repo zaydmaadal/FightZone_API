@@ -12,6 +12,9 @@ const clubsRoutes = require("./routes/api/v1/clubs");
 const licenseRoutes = require("./routes/api/v1/licenses");
 const eventsRoutes = require("./routes/api/v1/events");
 const vkbmoSyncRoutes = require("./routes/api/v1/vkbmo-sync");
+const matchesRoutes = require("./routes/api/v1/matches");
+const importRoutes = require("./routes/api/v1/import");
+const juryRoutes = require("./routes/api/v1/jury");
 
 require("dotenv").config();
 
@@ -53,6 +56,9 @@ app.use("/api/v1/clubs", clubsRoutes);
 app.use("/api/v1/licenses", licenseRoutes);
 app.use("/api/v1/events", eventsRoutes);
 app.use("/api/v1/vkbmo-sync", vkbmoSyncRoutes);
+app.use("/api/v1/matches", matchesRoutes);
+app.use("/api/v1/import", importRoutes);
+app.use("/api/v1/jury", juryRoutes);
 
 connectDB();
 
