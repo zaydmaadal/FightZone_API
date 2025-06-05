@@ -10,7 +10,6 @@ const fightSchema = new mongoose.Schema({
   event: { type: String }, // Naam van het evenement --> later een object van maken met meer details
   locatie: { type: String }, // Locatie van het evenement
   resultaat: { type: String }, // Of de vechter heeft gewonnen
-  Knockout: { type: Boolean }, // Of de vechter heeft gewonnen met een knockout
 });
 
 const vechterSchema = new mongoose.Schema({

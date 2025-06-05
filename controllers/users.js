@@ -225,7 +225,7 @@ exports.createMultipleUsers = async (req, res) => {
 exports.plannenGevecht = async (req, res) => {
   try {
     const { id } = req.params; // Vechter-ID
-    const { tegenstanderId, datum, event, locatie, knockout } = req.body;
+    const { tegenstanderId, datum, event, locatie } = req.body;
 
     // Controleer of alle benodigde gegevens zijn verstrekt
     if (!tegenstanderId || !datum || !event || !locatie) {
@@ -255,7 +255,6 @@ exports.plannenGevecht = async (req, res) => {
       event,
       locatie,
       resultaat: "Nog niet beoordeeld", // Resultaat nog niet bekend
-      knockout,
     };
 
     // Voeg gevecht toe aan de vechter
