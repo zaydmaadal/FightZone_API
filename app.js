@@ -60,6 +60,10 @@ app.use("/api/v1/matches", matchesRoutes);
 app.use("/api/v1/import", importRoutes);
 app.use("/api/v1/jury", juryRoutes);
 
+app.get("/ping", (req, res) => {
+  res.status(200).send("pong");
+});
+
 connectDB();
 
 console.log("API is running on http://localhost:3000");
