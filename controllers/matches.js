@@ -5,12 +5,17 @@ const Event = require("../models/Event");
 // Create a new match
 exports.createMatch = async (req, res) => {
   try {
-    const { eventId, fighter1, fighter2, weightClass, rounds } = req.body;
+    const { eventId, fighters, rounds } = req.body;
 
     // Validate required fields
-    if (!eventId || !fighter1 || !fighter2 || !weightClass) {
+    if (
+      !eventId ||
+      !fighters ||
+      !Array.isArray(fighters) ||
+      fighters.length !== 2
+    ) {
       return res.status(400).json({
-        message: "Event ID, beide vechters en gewichtsklasse zijn verplicht",
+        message: "Event ID en beide vechters zijn verplicht",
       });
     }
 
@@ -20,10 +25,19 @@ exports.createMatch = async (req, res) => {
       return res.status(404).json({ message: "Event niet gevonden" });
     }
 
+    // Validate fighters array
+    for (const fighter of fighters) {
+      if (!fighter.user || !fighter.weight) {
+        return res.status(400).json({
+          message: "Elke vechter moet een user ID en gewicht hebben",
+        });
+      }
+    }
+
     // Check if fighters exist and are actually fighters
     const [fighter1Data, fighter2Data] = await Promise.all([
-      User.findOne({ _id: fighter1, role: "Vechter" }),
-      User.findOne({ _id: fighter2, role: "Vechter" }),
+      User.findOne({ _id: fighters[0].user, role: "Vechter" }),
+      User.findOne({ _id: fighters[1].user, role: "Vechter" }),
     ]);
 
     if (!fighter1Data || !fighter2Data) {
@@ -33,22 +47,36 @@ exports.createMatch = async (req, res) => {
     }
 
     // Check if fighters are not the same person
-    if (fighter1 === fighter2) {
+    if (fighters[0].user === fighters[1].user) {
       return res.status(400).json({
         message: "Een vechter kan niet tegen zichzelf vechten",
       });
     }
 
-    // Create the match
+    // Create the match with new schema
     const match = new Match({
       eventId,
-      fighter1,
-      fighter2,
-      weightClass,
+      fighters: [
+        {
+          user: fighters[0].user,
+          weight: fighters[0].weight,
+          weightConfirmed: false,
+        },
+        {
+          user: fighters[1].user,
+          weight: fighters[1].weight,
+          weightConfirmed: false,
+        },
+      ],
       rounds: rounds || 3,
     });
 
     await match.save();
+
+    // Add match to event's matchmaking array
+    event.matchmaking.push(match._id);
+    event.hasMatchmaking = true;
+    await event.save();
 
     res.status(201).json({
       message: "Match succesvol aangemaakt",
@@ -68,8 +96,8 @@ exports.getAllMatches = async (req, res) => {
   try {
     const matches = await Match.find()
       .populate("eventId", "naam datum locatie")
-      .populate("fighter1", "voornaam achternaam")
-      .populate("fighter2", "voornaam achternaam");
+      .populate("fighters.user", "voornaam achternaam club")
+      .sort({ createdAt: -1 });
 
     res.status(200).json(matches);
   } catch (error) {
@@ -86,8 +114,7 @@ exports.getMatchById = async (req, res) => {
   try {
     const match = await Match.findById(req.params.id)
       .populate("eventId", "naam datum locatie")
-      .populate("fighter1", "voornaam achternaam")
-      .populate("fighter2", "voornaam achternaam");
+      .populate("fighters.user", "voornaam achternaam club");
 
     if (!match) {
       return res.status(404).json({ message: "Match niet gevonden" });
@@ -111,8 +138,7 @@ exports.updateMatch = async (req, res) => {
 
     // Don't allow updating certain fields
     delete updateData.eventId;
-    delete updateData.fighter1;
-    delete updateData.fighter2;
+    delete updateData.fighters;
     delete updateData.createdAt;
 
     const match = await Match.findByIdAndUpdate(
@@ -121,8 +147,7 @@ exports.updateMatch = async (req, res) => {
       { new: true, runValidators: true }
     )
       .populate("eventId", "naam datum locatie")
-      .populate("fighter1", "voornaam achternaam")
-      .populate("fighter2", "voornaam achternaam");
+      .populate("fighters.user", "voornaam achternaam club");
 
     if (!match) {
       return res.status(404).json({ message: "Match niet gevonden" });
@@ -144,19 +169,31 @@ exports.updateMatch = async (req, res) => {
 // Delete match
 exports.deleteMatch = async (req, res) => {
   try {
-    const match = await Match.findByIdAndDelete(req.params.id);
-
+    const match = await Match.findById(req.params.id);
     if (!match) {
       return res.status(404).json({ message: "Match niet gevonden" });
     }
+
+    // Remove match from event's matchmaking array
+    const event = await Event.findById(match.eventId);
+    if (event) {
+      event.matchmaking = event.matchmaking.filter(
+        (id) => id.toString() !== match._id.toString()
+      );
+      if (event.matchmaking.length === 0) {
+        event.hasMatchmaking = false;
+      }
+      await event.save();
+    }
+
+    await match.deleteOne();
 
     res.status(200).json({
       message: "Match succesvol verwijderd",
       deletedMatch: {
         id: match._id,
         eventId: match.eventId,
-        fighter1: match.fighter1,
-        fighter2: match.fighter2,
+        fighters: match.fighters,
       },
     });
   } catch (error) {

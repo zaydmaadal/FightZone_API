@@ -1,23 +1,15 @@
 const mongoose = require("mongoose");
 
-const fightSchema = new mongoose.Schema({
-  tegenstander: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    required: true,
-  }, // Verwijzing naar een andere gebruiker
-  datum: { type: Date, required: true }, // Datum van het gevecht
-  event: { type: String }, // Naam van het evenement --> later een object van maken met meer details
-  locatie: { type: String }, // Locatie van het evenement
-  resultaat: { type: String }, // Of de vechter heeft gewonnen
-});
-
 const vechterSchema = new mongoose.Schema({
   gewicht: { type: Number }, // in kg
   lengte: { type: Number }, // in cm
   klasse: { type: String }, // Vechtklasse
   bijnaam: { type: String }, // Bijnaam van de vechter
-  fights: [fightSchema], // Array van gevechten
+  fightRecord: {
+    wins: { type: Number, default: 0 },
+    losses: { type: Number, default: 0 },
+    draws: { type: Number, default: 0 },
+  },
   licentieNummer: { type: String, unique: true },
   vervalDatum: Date,
   fightingReady: { type: Boolean, default: true }, // Of de vechter klaar is om te vechten

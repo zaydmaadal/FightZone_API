@@ -3,19 +3,19 @@ const User = require("../models/User");
 const Club = require("../models/Club");
 const Event = require("../models/Event");
 const bcrypt = require("bcryptjs");
+const ExcelJS = require("exceljs");
 
 exports.importMatchmaking = async (req, res) => {
   try {
-    const { eventId, matchesData } = req.body;
+    const { eventId } = req.body;
 
-    // Validate input
-    if (!eventId || !matchesData || !Array.isArray(matchesData)) {
+    if (!req.file) {
       return res.status(400).json({
-        message: "Event ID en matches data zijn verplicht",
+        message: "Excel bestand is verplicht",
       });
     }
 
-    // 1. Validate event
+    // Validate event
     const event = await Event.findById(eventId);
     if (!event) {
       return res.status(404).json({
@@ -30,39 +30,72 @@ exports.importMatchmaking = async (req, res) => {
       });
     }
 
+    // Parse Excel file
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(req.file.buffer);
+    const worksheet = workbook.getWorksheet(1);
+
     const createdMatches = [];
     const errors = [];
 
-    // 2. Process each match
-    for (const matchData of matchesData) {
+    // Process each row in the Excel file
+    worksheet.eachRow(async (row, rowNumber) => {
+      if (rowNumber === 1) return; // Skip header row
+
       try {
-        // Validate match data
-        if (
-          !matchData.fighter1 ||
-          !matchData.fighter2 ||
-          !matchData.weightClass
-        ) {
+        const [
+          fighter1Name,
+          fighter1Club,
+          fighter1Weight,
+          fighter2Name,
+          fighter2Club,
+          fighter2Weight,
+          weightClass,
+          rounds,
+        ] = row.values.slice(1);
+
+        // Validate required fields
+        if (!fighter1Name || !fighter2Name || !weightClass) {
           errors.push({
-            match: matchData,
-            error:
-              "Ongeldige match data: vechters en gewichtsklasse zijn verplicht",
+            row: rowNumber,
+            error: "Ongeldige data: vechters en gewichtsklasse zijn verplicht",
           });
-          continue;
+          return;
         }
 
         // Find or create fighters
         const [fighter1, fighter2] = await Promise.all([
-          findOrCreateUser(matchData.fighter1),
-          findOrCreateUser(matchData.fighter2),
+          findOrCreateUser({
+            voornaam: fighter1Name.split(" ")[0],
+            achternaam: fighter1Name.split(" ").slice(1).join(" "),
+            club: fighter1Club,
+            weight: fighter1Weight,
+          }),
+          findOrCreateUser({
+            voornaam: fighter2Name.split(" ")[0],
+            achternaam: fighter2Name.split(" ").slice(1).join(" "),
+            club: fighter2Club,
+            weight: fighter2Weight,
+          }),
         ]);
 
-        // Create match
+        // Create match with new schema
         const match = new Match({
           eventId,
-          fighter1: fighter1._id,
-          fighter2: fighter2._id,
-          weightClass: matchData.weightClass,
-          rounds: matchData.rounds || 3,
+          fighters: [
+            {
+              user: fighter1._id,
+              weight: fighter1Weight,
+              weightConfirmed: false,
+            },
+            {
+              user: fighter2._id,
+              weight: fighter2Weight,
+              weightConfirmed: false,
+            },
+          ],
+          weightClass,
+          rounds: rounds || 3,
         });
 
         await match.save();
@@ -70,11 +103,11 @@ exports.importMatchmaking = async (req, res) => {
         createdMatches.push(match);
       } catch (error) {
         errors.push({
-          match: matchData,
+          row: rowNumber,
           error: error.message,
         });
       }
-    }
+    });
 
     // Update event if any matches were created
     if (createdMatches.length > 0) {

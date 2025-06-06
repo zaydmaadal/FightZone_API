@@ -6,45 +6,25 @@ const matchSchema = new mongoose.Schema({
     ref: "Event",
     required: true,
   },
-  fighter1: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    required: true,
-  },
-  fighter2: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    required: true,
-  },
-  weightClass: {
-    type: String,
-    required: true,
-  },
-  rounds: {
-    type: Number,
-    default: 3,
-  },
-  weight1Confirmed: {
-    type: Boolean,
-    default: false,
-  },
-  weight2Confirmed: {
-    type: Boolean,
-    default: false,
-  },
-  result: {
-    type: String,
-    enum: ["Pending", "Fighter1", "Fighter2", "Draw"],
-    default: "Pending",
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now,
-  },
+  fighters: [
+    {
+      user: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true,
+      },
+      weight: { type: Number, required: true },
+      weightConfirmed: { type: Boolean, default: false },
+      result: {
+        type: String,
+        enum: ["win", "loss", "draw", "pending"],
+        default: "pending",
+      },
+    },
+  ],
+  winner: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
 });
 
 // Update the updatedAt timestamp before saving
