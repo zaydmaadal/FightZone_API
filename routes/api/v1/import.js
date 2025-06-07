@@ -8,11 +8,10 @@ const storage = multer.memoryStorage();
 const upload = multer({
   storage,
   fileFilter: (req, file, cb) => {
-    // Accept only Excel files
     if (
-      file.mimetype ===
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
-      file.mimetype === "application/vnd.ms-excel"
+      file.mimetype.includes("excel") ||
+      file.mimetype.includes("spreadsheet") ||
+      file.originalname.endsWith(".xlsx")
     ) {
       cb(null, true);
     } else {
@@ -21,23 +20,8 @@ const upload = multer({
   },
 });
 
-// Middleware to handle multiple field names
-const uploadMiddleware = (req, res, next) => {
-  upload.single("file")(req, res, (err) => {
-    if (err && err.code === "LIMIT_UNEXPECTED_FILE") {
-      // Try alternative field names
-      upload.single("excelFile")(req, res, (err2) => {
-        if (err2 && err2.code === "LIMIT_UNEXPECTED_FILE") {
-          upload.single("matchmakingFile")(req, res, next);
-        } else {
-          next(err2);
-        }
-      });
-    } else {
-      next(err);
-    }
-  });
-};
+// Simplified upload middleware
+const uploadMiddleware = upload.single("file");
 
 // POST /api/v1/import/matchmaking - Import matchmaking data
 router.post(
@@ -45,5 +29,15 @@ router.post(
   uploadMiddleware,
   importController.importMatchmaking
 );
+
+// Add error handling middleware
+router.use((err, req, res, next) => {
+  console.error("Server error:", err);
+  res.status(500).json({
+    success: false,
+    message: err.message || "Internal server error",
+    code: "SERVER_ERROR",
+  });
+});
 
 module.exports = router;
