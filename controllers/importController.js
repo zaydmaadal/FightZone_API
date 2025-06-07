@@ -79,19 +79,45 @@ function validateData(data, schema) {
   return errors;
 }
 
+// Helper function to parse weight values (expecting dot as decimal separator)
+function parseWeight(weight) {
+  if (!weight) return null;
+  // Attempt to parse directly, expecting dot as decimal separator
+  const parsed = parseFloat(weight.toString().trim());
+  if (isNaN(parsed)) return null;
+  return parsed;
+}
+
 // Helper function to parse simple result
 function parseSimpleResult(resultString, fighter1Id, fighter2Id) {
   if (!resultString) return { winner: null };
 
-  const normalized = resultString.trim().toUpperCase();
+  const normalized = resultString.toString().trim().toUpperCase();
 
-  return {
-    winner: normalized.startsWith("R")
-      ? fighter1Id
-      : normalized.startsWith("B")
-      ? fighter2Id
-      : null,
-  };
+  // Handle different result formats
+  if (
+    normalized.includes("R") ||
+    normalized.includes("RODE") ||
+    normalized.includes("WBPTS") ||
+    normalized.includes("WRPTS") ||
+    normalized.includes("WBRSC") ||
+    normalized.includes("KO")
+  ) {
+    // Check if the result explicitly mentions the second fighter losing (B or Blauwe)
+    if (normalized.includes("B") || normalized.includes("BLAUWE")) {
+      // This case is tricky, assuming R/Rode wins over B/Blauwe if both are mentioned or if result is like WRSC B 2'R
+      return { winner: fighter1Id };
+    }
+    // If no explicit mention of B/Blauwe, assume fighter 1 wins based on R/Rode/WBPTS/WRPTS etc.
+    return { winner: fighter1Id };
+  } else if (normalized.includes("B") || normalized.includes("BLAUWE")) {
+    // If B/Blauwe is mentioned and R/Rode is not explicitly in a winning context
+    return { winner: fighter2Id };
+  } else if (normalized.includes("DRAW") || normalized.includes("GELIJK")) {
+    return { winner: null };
+  }
+
+  return { winner: null }; // Default to no winner if result is unclear
 }
 
 exports.importMatchmaking = async (req, res) => {
@@ -112,29 +138,18 @@ exports.importMatchmaking = async (req, res) => {
       });
     }
 
-    // Excel processing
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(req.file.buffer);
-    const worksheet = workbook.getWorksheet(1);
-
-    // Validate worksheet
-    if (!worksheet) {
-      logger.error("Import failed: Invalid Excel file - no worksheet found");
-      return res.status(400).json({
-        message: "Ongeldig Excel bestand - geen werkblad gevonden",
-        code: "INVALID_EXCEL",
-      });
-    }
-
-    // Extract event title from the first row
-    const firstRow = worksheet.getRow(1);
-    const eventTitle = firstRow.getCell(1).value?.toString().trim();
+    // Extract event title from filename
+    // Remove file extension and any special characters
+    const eventTitle = req.file.originalname
+      .replace(/\.[^/.]+$/, "") // Remove file extension
+      .replace(/[_-]/g, " ") // Replace underscores and dashes with spaces
+      .trim();
 
     if (!eventTitle) {
-      logger.error("Import failed: Event title not found in Excel");
+      logger.error("Import failed: Invalid filename");
       return res.status(400).json({
-        message: "Event titel niet gevonden in Excel bestand",
-        code: "EVENT_TITLE_MISSING",
+        message: "Ongeldige bestandsnaam - moet een event titel bevatten",
+        code: "INVALID_FILENAME",
       });
     }
 
@@ -159,6 +174,20 @@ exports.importMatchmaking = async (req, res) => {
       });
     }
 
+    // Excel processing
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(req.file.buffer);
+    const worksheet = workbook.getWorksheet(1);
+
+    // Validate worksheet
+    if (!worksheet) {
+      logger.error("Import failed: Invalid Excel file - no worksheet found");
+      return res.status(400).json({
+        message: "Ongeldig Excel bestand - geen werkblad gevonden",
+        code: "INVALID_EXCEL",
+      });
+    }
+
     const createdMatches = [];
     const errors = [];
 
@@ -166,31 +195,44 @@ exports.importMatchmaking = async (req, res) => {
     for (let rowNumber = 3; rowNumber <= worksheet.rowCount; rowNumber++) {
       try {
         const row = worksheet.getRow(rowNumber);
-        const rowData = row.values.slice(1);
+        const rowData = row.values.slice(1); // Slice(1) to skip the initial row number column
 
-        // Skip empty rows/breaks
-        if (rowData.length < 14 || !rowData[4]) continue;
+        // Skip empty or incomplete rows
+        if (!rowData || rowData.length < 13) {
+          logger.warn("Skipping row due to insufficient data", {
+            rowNumber,
+            rowDataLength: rowData.length,
+          });
+          continue;
+        }
 
-        const [
-          _, // Ignore row number
-          __, // Ignore weight class
-          ___, // Ignore style
-          ____, // Ignore rounds
-          fighter1Name, // Column 5: Fighter 1 name
-          fighter1Club, // Column 6: Club 1
-          fighter1Weight, // Column 7: Weight 1
-          age1, // Ignore age 1
-          vs, // Ignore "VS"
-          fighter2Name, // Column 10: Fighter 2 name
-          fighter2Club, // Column 11: Club 2
-          fighter2Weight, // Column 12: Weight 2
-          age2, // Ignore age 2
-          result, // Column 14: Basic result (R/B/DRAW)
-        ] = rowData;
+        // Map columns based on the provided Excel structure (0-indexed after slice(1))
+        const klas = rowData[0];
+        const stijl = rowData[1];
+        const rounds = rowData[2];
+        const fighter1Name = rowData[3]; // Rode Hoek
+        const fighter1Club = rowData[4]; // Sportschool
+        const fighter1WeightRaw = rowData[5]; // KG
+        const age1 = rowData[6]; // LT
+        const vs = rowData[7]; // VS
+        const fighter2Name = rowData[8]; // Blauwe Hoek
+        const fighter2Club = rowData[9]; // Sportschool
+        const fighter2WeightRaw = rowData[10]; // KG
+        const age2 = rowData[11]; // LT
+        const result = rowData[12]; // Uitslagen
 
-        // Validate required fields
+        // Validate required fields (Names and Clubs)
         if (!fighter1Name || !fighter2Name || !fighter1Club || !fighter2Club) {
           throw new Error("Ontbrekende vechtergegevens");
+        }
+
+        // Parse weights
+        const weight1 = parseWeight(fighter1WeightRaw);
+        const weight2 = parseWeight(fighter2WeightRaw);
+
+        if (weight1 === null || weight2 === null) {
+          // Check specifically for null from parseWeight
+          throw new Error("Ongeldige gewichtswaarden");
         }
 
         // Process fighters
@@ -199,7 +241,7 @@ exports.importMatchmaking = async (req, res) => {
             {
               fullName: fighter1Name.toString().trim(),
               club: fighter1Club.toString().trim(),
-              weight: parseFloat(fighter1Weight.toString().replace(",", ".")),
+              weight: weight1,
             },
             session
           ),
@@ -207,7 +249,7 @@ exports.importMatchmaking = async (req, res) => {
             {
               fullName: fighter2Name.toString().trim(),
               club: fighter2Club.toString().trim(),
-              weight: parseFloat(fighter2Weight.toString().replace(",", ".")),
+              weight: weight2,
             },
             session
           ),
@@ -215,7 +257,7 @@ exports.importMatchmaking = async (req, res) => {
 
         // Create match
         const resultData = parseSimpleResult(
-          result?.toString(),
+          result,
           fighter1._id,
           fighter2._id
         );
@@ -225,16 +267,17 @@ exports.importMatchmaking = async (req, res) => {
           fighters: [
             {
               user: fighter1._id,
-              weight: parseFloat(fighter1Weight.toString().replace(",", ".")),
+              weight: weight1,
               weightConfirmed: true,
             },
             {
               user: fighter2._id,
-              weight: parseFloat(fighter2Weight.toString().replace(",", ".")),
+              weight: weight2,
               weightConfirmed: true,
             },
           ],
           winner: resultData.winner,
+          // Optionally add rounds, style, klas if needed in the Match model
         });
 
         await match.save({ session });
@@ -259,6 +302,7 @@ exports.importMatchmaking = async (req, res) => {
     // Update event if any matches were created
     if (createdMatches.length > 0) {
       event.hasMatchmaking = true;
+      // Only add matches that were successfully created
       event.matchmaking.push(...createdMatches.map((m) => m._id));
       await event.save({ session });
 
@@ -276,6 +320,7 @@ exports.importMatchmaking = async (req, res) => {
       errors: errors.length,
       eventId: event._id,
       eventTitle,
+      details: errors.length > 0 ? { errors } : undefined,
     });
   } catch (error) {
     await session.abortTransaction();
