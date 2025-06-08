@@ -15,6 +15,7 @@ const vkbmoSyncRoutes = require("./routes/api/v1/vkbmo-sync");
 const matchesRoutes = require("./routes/api/v1/matches");
 const importRoutes = require("./routes/api/v1/import");
 const juryRoutes = require("./routes/api/v1/jury");
+const uploadRoutes = require("./routes/api/v1/upload");
 
 require("dotenv").config();
 
@@ -40,11 +41,13 @@ app.use(
   })
 );
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Verhoog de limiet naar 10mb voor grote bestanden
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ limit: "10mb", extended: true }));
+app.use(bodyParser.json({ limit: "10mb" }));
+app.use(bodyParser.urlencoded({ limit: "10mb", extended: true }));
+
 app.use(logger("dev"));
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -59,6 +62,7 @@ app.use("/api/v1/vkbmo-sync", vkbmoSyncRoutes);
 app.use("/api/v1/matches", matchesRoutes);
 app.use("/api/v1/import", importRoutes);
 app.use("/api/v1/jury", juryRoutes);
+app.use("/api/v1/upload", uploadRoutes);
 
 app.get("/ping", (req, res) => {
   res.status(200).send("pong");
