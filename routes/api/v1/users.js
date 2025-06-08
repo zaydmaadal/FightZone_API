@@ -24,14 +24,15 @@ router.patch(
   usersController.updateGevechtResultaat
 );
 
-// DELETE /api/v1/users/:id - Verwijdert een specifieke user
-router.delete("/:id", usersController.deleteUserById);
-
 // *** Eerst: PATCH /api/v1/users/me ***
 router.patch("/me", authenticate, usersController.updateMe);
 
-// Daarna: alle andere PATCH- en DELETE-routes op /:id
 router.patch("/:id", usersController.updateUser);
+
+// DELETE /api/v1/users/:id - Verwijdert een specifieke user
 router.delete("/:id", usersController.deleteUserById);
+
+
+
 
 module.exports = router;
