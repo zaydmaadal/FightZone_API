@@ -27,7 +27,7 @@ router.patch(
 // DELETE /api/v1/users/:id - Verwijdert een specifieke user
 router.delete("/:id", usersController.deleteUserById);
 
-// PATCH /api/v1/users/:id    ← nieuw
-router.patch("/me", authenticate,usersController.updateUser);
+// PATCH /api/v1/users/me - Update the current user
+router.patch("/me", authenticate, usersController.updateMe);
 
 module.exports = router;

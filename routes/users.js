@@ -9,8 +9,7 @@ router.get('/', function(req, res, next) {
   res.send('respond with a resource');
 });
 
-// PATCH /api/v1/users/me - Update the current user
-router.patch("/me", authenticate, usersController.updateMe);
+
 
 
 module.exports = router;
