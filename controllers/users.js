@@ -408,31 +408,4 @@ exports.deleteUserById = async (req, res) => {
   }
 };
 
-// controllers/users.js
-const User = require("../models/User"); // of waar jouw User-model staat
-
-/**
- * Update een user op basis van req.params.id
- */
-exports.updateMe = async (req, res) => {
-  try {
-    const userId = req.user.id; // req.user wordt gezet door je authenticate middleware
-    const updates = req.body;
-    const updated = await User.findByIdAndUpdate(userId, updates, {
-      new: true,
-      runValidators: true,
-      context: "query"
-    }).select("-wachtwoord");
-
-    if (!updated) {
-      return res.status(404).json({ error: "User niet gevonden" });
-    }
-
-    res.json(updated);
-  } catch (err) {
-    console.error("Error in updateMe:", err);
-    res.status(500).json({ error: "Er ging iets mis op de server" });
-  }
-};
-
 module.exports = exports;
