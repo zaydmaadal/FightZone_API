@@ -7,6 +7,6 @@ router.get('/', function(req, res, next) {
 });
 
 // PATCH /api/v1/users/:id - Update een bestaande user
-router.patch("/:id", usersController.updateUser);
+router.patch("/:id", usersController.updateUser.updateMe);
 
 module.exports = router;
