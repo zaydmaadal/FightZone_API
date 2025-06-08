@@ -42,6 +42,8 @@ const userSchema = new mongoose.Schema(
     vechterInfo: vechterSchema,
     trainerInfo: trainerSchema,
     vkbmoLidInfo: vkbmoLidSchema,
+    resetPasswordToken: String,
+    resetPasswordExpires: Date,
   },
   { timestamps: true }
 );
