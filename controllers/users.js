@@ -42,6 +42,7 @@ exports.createUser = async (req, res) => {
       vervalDatum,
       vechterInfo,
       club,
+      profielfoto,
       role = "Vechter", // Default naar Vechter
     } = req.body;
 
@@ -85,6 +86,7 @@ exports.createUser = async (req, res) => {
       geboortedatum: new Date(geboortedatum),
       role,
       club,
+      profielfoto: profielfoto || null, // Voeg Firebase URL toe
     };
 
     // Voeg rol-specifieke data toe
