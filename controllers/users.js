@@ -414,16 +414,15 @@ const User = require("../models/User"); // of waar jouw User-model staat
 /**
  * Update een user op basis van req.params.id
  */
-exports.updateUser = async (req, res) => {
+exports.updateMe = async (req, res) => {
   try {
-    const { id } = req.params;
+    const userId = req.user.id; // req.user wordt gezet door je authenticate middleware
     const updates = req.body;
-    // runValidators zorgt dat je Mongoose-validatie nog doorloopt
-    const updated = await User.findByIdAndUpdate(id, updates, {
+    const updated = await User.findByIdAndUpdate(userId, updates, {
       new: true,
       runValidators: true,
       context: "query"
-    }).select("-wachtwoord"); // verberg het wachtwoord in de response
+    }).select("-wachtwoord");
 
     if (!updated) {
       return res.status(404).json({ error: "User niet gevonden" });
@@ -431,7 +430,7 @@ exports.updateUser = async (req, res) => {
 
     res.json(updated);
   } catch (err) {
-    console.error("Error in updateUser:", err);
+    console.error("Error in updateMe:", err);
     res.status(500).json({ error: "Er ging iets mis op de server" });
   }
 };

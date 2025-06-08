@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const usersController = require("../../../controllers/users");
+const { authenticate } = require("../../../middleware/auth");
 
 // GET /api/v1/users - Haalt alle users op
 router.get("/", usersController.getAllUsers);
@@ -27,6 +28,6 @@ router.patch(
 router.delete("/:id", usersController.deleteUserById);
 
 // PATCH /api/v1/users/:id    ← nieuw
-router.patch("/:id", usersController.updateUser);
+router.patch("/me", authenticate,usersController.updateUser);
 
 module.exports = router;
