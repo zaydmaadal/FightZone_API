@@ -408,4 +408,32 @@ exports.deleteUserById = async (req, res) => {
   }
 };
 
+// controllers/users.js
+const User = require("../models/User"); // of waar jouw User-model staat
+
+/**
+ * Update een user op basis van req.params.id
+ */
+exports.updateUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+    // runValidators zorgt dat je Mongoose-validatie nog doorloopt
+    const updated = await User.findByIdAndUpdate(id, updates, {
+      new: true,
+      runValidators: true,
+      context: "query"
+    }).select("-wachtwoord"); // verberg het wachtwoord in de response
+
+    if (!updated) {
+      return res.status(404).json({ error: "User niet gevonden" });
+    }
+
+    res.json(updated);
+  } catch (err) {
+    console.error("Error in updateUser:", err);
+    res.status(500).json({ error: "Er ging iets mis op de server" });
+  }
+};
+
 module.exports = exports;
