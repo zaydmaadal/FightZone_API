@@ -414,17 +414,13 @@ exports.updateVechter = async (req, res) => {
     const { id } = req.params;
     const updateData = req.body;
 
-    // Valideer input
     if (!updateData || Object.keys(updateData).length === 0) {
       return res
         .status(400)
         .json({ message: "Geen update gegevens ontvangen" });
     }
 
-    // Toegestane velden voor update
     const allowedUpdates = ["gewicht", "lengte", "bijnaam", "klasse", "record"];
-
-    // Filter ongeldige velden
     const isValidOperation = Object.keys(updateData).every((update) =>
       allowedUpdates.includes(update)
     );
@@ -433,14 +429,39 @@ exports.updateVechter = async (req, res) => {
       return res.status(400).json({ message: "Ongeldige update velden" });
     }
 
-    // Zoek en update de vechter
+    // Numerieke validatie
+    if (updateData.gewicht) {
+      const gewicht = parseFloat(updateData.gewicht);
+      if (isNaN(gewicht)) {
+        return res.status(400).json({ message: "Gewicht moet een getal zijn" });
+      }
+      if (gewicht < 20 || gewicht > 150) {
+        return res
+          .status(400)
+          .json({ message: "Gewicht moet tussen 20-150 kg liggen" });
+      }
+      updateData.gewicht = gewicht;
+    }
+
+    if (updateData.lengte) {
+      const lengte = parseFloat(updateData.lengte);
+      if (isNaN(lengte)) {
+        return res.status(400).json({ message: "Lengte moet een getal zijn" });
+      }
+      if (lengte < 100 || lengte > 220) {
+        return res
+          .status(400)
+          .json({ message: "Lengte moet tussen 100-220 cm liggen" });
+      }
+      updateData.lengte = lengte;
+    }
+
     const user = await User.findById(id);
 
     if (!user || user.role !== "Vechter") {
       return res.status(404).json({ message: "Vechter niet gevonden" });
     }
 
-    // Update alleen toegestane velden
     Object.keys(updateData).forEach((update) => {
       user.vechterInfo[update] = updateData[update];
     });
