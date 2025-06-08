@@ -23,6 +23,9 @@ router.patch(
   usersController.updateGevechtResultaat
 );
 
+// PATCH /api/v1/users/vechter/:id - Update een vechter
+router.patch("/vechter/:id", usersController.updateVechter);
+
 // DELETE /api/v1/users/:id - Verwijdert een specifieke user
 router.delete("/:id", usersController.deleteUserById);
 

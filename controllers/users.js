@@ -408,4 +408,56 @@ exports.deleteUserById = async (req, res) => {
   }
 };
 
+// Update een vechter
+exports.updateVechter = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+
+    // Valideer input
+    if (!updateData || Object.keys(updateData).length === 0) {
+      return res
+        .status(400)
+        .json({ message: "Geen update gegevens ontvangen" });
+    }
+
+    // Toegestane velden voor update
+    const allowedUpdates = ["gewicht", "lengte", "bijnaam", "klasse", "record"];
+
+    // Filter ongeldige velden
+    const isValidOperation = Object.keys(updateData).every((update) =>
+      allowedUpdates.includes(update)
+    );
+
+    if (!isValidOperation) {
+      return res.status(400).json({ message: "Ongeldige update velden" });
+    }
+
+    // Zoek en update de vechter
+    const user = await User.findById(id);
+
+    if (!user || user.role !== "Vechter") {
+      return res.status(404).json({ message: "Vechter niet gevonden" });
+    }
+
+    // Update alleen toegestane velden
+    Object.keys(updateData).forEach((update) => {
+      user.vechterInfo[update] = updateData[update];
+    });
+
+    await user.save();
+
+    res.status(200).json({
+      message: "Vechter succesvol bijgewerkt",
+      updatedUser: user,
+    });
+  } catch (error) {
+    console.error("Fout bij bijwerken vechter:", error);
+    res.status(500).json({
+      message: "Serverfout",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = exports;
